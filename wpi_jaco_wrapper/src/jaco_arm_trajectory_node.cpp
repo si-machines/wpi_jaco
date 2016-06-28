@@ -763,84 +763,80 @@ void JacoArmTrajectoryController::execute_joint_trajectory(const control_msgs::F
   float currentPoint;
   double current_joint_pos[NUM_JACO_JOINTS];
 
-  // Setup storage for the real-robot trajectories
-  AngularPosition position_data;
-  TrajectoryPoint trajPoint;
-  trajPoint.InitStruct();
-  trajPoint.Position.Type = ANGULAR_VELOCITY;
-  trajPoint.Position.HandMode = HAND_NOMOVEMENT;
+  // At this point we're going to check if we're in the simulation - if so - just send
+  // position trajectory and not run the PID loop
+  if (sim_flag_){
+    ROS_INFO("WARNING: Simulation velocity trajectory is executed as a position trajectory");
 
-  ros::Rate rate(600); // Loop running at 600 Hz
-  // Actual control loop for real-robot arm
-  while (!trajectoryComplete)
-  {
-    if (eStopEnabled)
-    {
-      control_msgs::FollowJointTrajectoryResult result;
-      result.error_code = control_msgs::FollowJointTrajectoryResult::PATH_TOLERANCE_VIOLATED;
-      smooth_joint_trajectory_server_->setSucceeded(result);
-      return;
-    }
+    // Setup msg JointTrajectory for std gazebo ros controller
+    // Populate JointTrajectory with the points in the current goal
+    trajectory_msgs::JointTrajectory jtm;
+    trajectory_msgs::JointTrajectoryPoint jtp;
+    jtm.joint_names = goal->trajectory.joint_names;
+    jtm.points = goal->trajectory.points;
 
-    //check for preempt requests from clients
-    if (smooth_joint_trajectory_server_->isPreemptRequested())
-    {
+    // Publish out trajaectory points listed in the goal
+    angCmdSimPublisher.publish(jtm);
 
-      // check for sim - sim doesn't stop the gripper here
-      if(!sim_flag_){
-        //stop gripper control
-        trajPoint.Position.Actuators.Actuator1 = 0.0;
-        trajPoint.Position.Actuators.Actuator2 = 0.0;
-        trajPoint.Position.Actuators.Actuator3 = 0.0;
-        trajPoint.Position.Actuators.Actuator4 = 0.0;
-        trajPoint.Position.Actuators.Actuator5 = 0.0;
-        trajPoint.Position.Actuators.Actuator6 = 0.0;
-        executeAngularTrajectoryPoint(trajPoint, true);
-      }
+    // Wait a second for the arm to move a bit
+    ros::Duration(1.0).sleep(); 
 
-      //preempt action server
-      smooth_joint_trajectory_server_->setPreempted();
-      ROS_INFO("Joint trajectory server preempted by client");
+    // Check the total error to determine if the trajectory finished
+    totalError = 1.0;
+    float prevError = 0.0;
+    while (totalError != prevError && totalError > 0.08){
+        prevError = totalError;
 
-      return;
-    }
-
-    //get time for trajectory
-    t = ros::Time::now().toSec() - startTime;
-    if (t > timePoints.at(timePoints.size() - 1))
-    {
-
-      // Check where to get current joints from
-      if(sim_flag_){
         // Copy from joint_state publisher to current joints
         std::copy(joint_pos_.begin(), joint_pos_.end(), current_joint_pos);
-      } else {
-        //use final trajectory point as the goal to calculate error until the error
-        //is small enough to be considered successful
+
+        // Compute total error of all joints away from last position
+        totalError = 0;
+        for (unsigned int i = 0; i < NUM_JACO_JOINTS; i++)
         {
-          boost::recursive_mutex::scoped_lock lock(api_mutex);
-          GetAngularPosition(position_data);
+          currentPoint = simplify_angle(current_joint_pos[i]);
+          error[i] = nearest_equivalent(simplify_angle(goal->trajectory.points[numPoints-1].positions[i]),currentPoint) - currentPoint;
+          totalError += fabs(error[i]);
         }
-        current_joint_pos[0] = position_data.Actuators.Actuator1 * DEG_TO_RAD;
-        current_joint_pos[1] = position_data.Actuators.Actuator2 * DEG_TO_RAD;
-        current_joint_pos[2] = position_data.Actuators.Actuator3 * DEG_TO_RAD;
-        current_joint_pos[3] = position_data.Actuators.Actuator4 * DEG_TO_RAD;
-        current_joint_pos[4] = position_data.Actuators.Actuator5 * DEG_TO_RAD;
-        current_joint_pos[5] = position_data.Actuators.Actuator6 * DEG_TO_RAD;
+      // Rate to check if error has changed
+      ros::Duration(0.5).sleep(); 
+    }
+
+    // Tell the server we finished the trajectory
+    ROS_INFO("Trajectory Control Complete.");
+    control_msgs::FollowJointTrajectoryResult result;
+    result.error_code = control_msgs::FollowJointTrajectoryResult::SUCCESSFUL;
+    smooth_joint_trajectory_server_->setSucceeded(result);
+
+  // Currently left sim_flags inside this section if we wish to go back to velocity control
+  } else {
+
+    // Setup storage for the real-robot trajectories
+    AngularPosition position_data;
+    TrajectoryPoint trajPoint;
+    trajPoint.InitStruct();
+    trajPoint.Position.Type = ANGULAR_VELOCITY;
+    trajPoint.Position.HandMode = HAND_NOMOVEMENT;
+
+    ros::Rate rate(600); // Loop running at 600 Hz
+    // Actual control loop for real-robot arm
+    while (!trajectoryComplete)
+    {
+      if (eStopEnabled)
+      {
+        control_msgs::FollowJointTrajectoryResult result;
+        result.error_code = control_msgs::FollowJointTrajectoryResult::PATH_TOLERANCE_VIOLATED;
+        smooth_joint_trajectory_server_->setSucceeded(result);
+        return;
       }
 
-      totalError = 0;
-      for (unsigned int i = 0; i < NUM_JACO_JOINTS; i++)
+      //check for preempt requests from clients
+      if (smooth_joint_trajectory_server_->isPreemptRequested())
       {
-        currentPoint = simplify_angle(current_joint_pos[i]);
-        error[i] = nearest_equivalent(simplify_angle((splines.at(i))(timePoints.at(timePoints.size() - 1))),
-                                      currentPoint) - currentPoint;
-        totalError += fabs(error[i]);
-      }
 
-      if (totalError < .03)
-      {
-        if (!sim_flag_){ // stop gripper?
+        // check for sim - sim doesn't stop the gripper here
+        if(!sim_flag_){
+          //stop gripper control
           trajPoint.Position.Actuators.Actuator1 = 0.0;
           trajPoint.Position.Actuators.Actuator2 = 0.0;
           trajPoint.Position.Actuators.Actuator3 = 0.0;
@@ -850,68 +846,116 @@ void JacoArmTrajectoryController::execute_joint_trajectory(const control_msgs::F
           executeAngularTrajectoryPoint(trajPoint, true);
         }
 
-        trajectoryComplete = true;
-        ROS_INFO("Trajectory complete!");
-        break;
+        //preempt action server
+        smooth_joint_trajectory_server_->setPreempted();
+        ROS_INFO("Joint trajectory server preempted by client");
+
+        return;
       }
-    }
-    else
-    {
-      // Check where to get current joints from
-      if(sim_flag_){
-        std::copy(joint_pos_.begin(), joint_pos_.end(), current_joint_pos);
-      } else {
-        //calculate error
-        {
-          boost::recursive_mutex::scoped_lock lock(api_mutex);
-          GetAngularPosition(position_data);
+
+      //get time for trajectory
+      t = ros::Time::now().toSec() - startTime;
+      if (t > timePoints.at(timePoints.size() - 1))
+      {
+
+        // Check where to get current joints from
+        if(sim_flag_){
+          // Copy from joint_state publisher to current joints
+          std::copy(joint_pos_.begin(), joint_pos_.end(), current_joint_pos);
+        } else {
+          //use final trajectory point as the goal to calculate error until the error
+          //is small enough to be considered successful
+          {
+            boost::recursive_mutex::scoped_lock lock(api_mutex);
+            GetAngularPosition(position_data);
+          }
+          current_joint_pos[0] = position_data.Actuators.Actuator1 * DEG_TO_RAD;
+          current_joint_pos[1] = position_data.Actuators.Actuator2 * DEG_TO_RAD;
+          current_joint_pos[2] = position_data.Actuators.Actuator3 * DEG_TO_RAD;
+          current_joint_pos[3] = position_data.Actuators.Actuator4 * DEG_TO_RAD;
+          current_joint_pos[4] = position_data.Actuators.Actuator5 * DEG_TO_RAD;
+          current_joint_pos[5] = position_data.Actuators.Actuator6 * DEG_TO_RAD;
         }
-        current_joint_pos[0] = position_data.Actuators.Actuator1 * DEG_TO_RAD;
-        current_joint_pos[1] = position_data.Actuators.Actuator2 * DEG_TO_RAD;
-        current_joint_pos[2] = position_data.Actuators.Actuator3 * DEG_TO_RAD;
-        current_joint_pos[3] = position_data.Actuators.Actuator4 * DEG_TO_RAD;
-        current_joint_pos[4] = position_data.Actuators.Actuator5 * DEG_TO_RAD;
-        current_joint_pos[5] = position_data.Actuators.Actuator6 * DEG_TO_RAD;
+
+        totalError = 0;
+        for (unsigned int i = 0; i < NUM_JACO_JOINTS; i++)
+        {
+          currentPoint = simplify_angle(current_joint_pos[i]);
+          error[i] = nearest_equivalent(simplify_angle((splines.at(i))(timePoints.at(timePoints.size() - 1))),
+                                        currentPoint) - currentPoint;
+          totalError += fabs(error[i]);
+        }
+
+        if (totalError < .03)
+        {
+          if (!sim_flag_){ // stop gripper?
+            trajPoint.Position.Actuators.Actuator1 = 0.0;
+            trajPoint.Position.Actuators.Actuator2 = 0.0;
+            trajPoint.Position.Actuators.Actuator3 = 0.0;
+            trajPoint.Position.Actuators.Actuator4 = 0.0;
+            trajPoint.Position.Actuators.Actuator5 = 0.0;
+            trajPoint.Position.Actuators.Actuator6 = 0.0;
+            executeAngularTrajectoryPoint(trajPoint, true);
+          }
+
+          trajectoryComplete = true;
+          ROS_INFO("Trajectory complete!");
+          break;
+        }
       }
+      else
+      {
+        // Check where to get current joints from
+        if(sim_flag_){
+          std::copy(joint_pos_.begin(), joint_pos_.end(), current_joint_pos);
+        } else {
+          //calculate error
+          {
+            boost::recursive_mutex::scoped_lock lock(api_mutex);
+            GetAngularPosition(position_data);
+          }
+          current_joint_pos[0] = position_data.Actuators.Actuator1 * DEG_TO_RAD;
+          current_joint_pos[1] = position_data.Actuators.Actuator2 * DEG_TO_RAD;
+          current_joint_pos[2] = position_data.Actuators.Actuator3 * DEG_TO_RAD;
+          current_joint_pos[3] = position_data.Actuators.Actuator4 * DEG_TO_RAD;
+          current_joint_pos[4] = position_data.Actuators.Actuator5 * DEG_TO_RAD;
+          current_joint_pos[5] = position_data.Actuators.Actuator6 * DEG_TO_RAD;
+        }
+
+        for (unsigned int i = 0; i < NUM_JACO_JOINTS; i++)
+        {
+          currentPoint = simplify_angle(current_joint_pos[i]);
+          error[i] = nearest_equivalent(simplify_angle((splines.at(i))(t)), currentPoint) - currentPoint;
+        }
+      }
+
+      //calculate control input - PD control loop
+      //populate the velocity command
+      trajPoint.Position.Actuators.Actuator1 = (KP * error[0] + KV * (error[0] - prevError[0]) * RAD_TO_DEG);
+      trajPoint.Position.Actuators.Actuator2 = (KP * error[1] + KV * (error[1] - prevError[1]) * RAD_TO_DEG);
+      trajPoint.Position.Actuators.Actuator3 = (KP * error[2] + KV * (error[2] - prevError[2]) * RAD_TO_DEG);
+      trajPoint.Position.Actuators.Actuator4 = (KP * error[3] + KV * (error[3] - prevError[3]) * RAD_TO_DEG);
+      trajPoint.Position.Actuators.Actuator5 = (KP * error[4] + KV * (error[4] - prevError[4]) * RAD_TO_DEG);
+      trajPoint.Position.Actuators.Actuator6 = (KP * error[5] + KV * (error[5] - prevError[5]) * RAD_TO_DEG);
+
+      //for debugging:
+      // cout << "Errors: " << error[0] << ", " << error[1] << ", " << error[2] << ", " << error[3] << ", " << error[4] << ", " << error[5] << endl;
+
+      //send the velocity command - to real-robot
+      executeAngularTrajectoryPoint(trajPoint, true);
 
       for (unsigned int i = 0; i < NUM_JACO_JOINTS; i++)
       {
-        currentPoint = simplify_angle(current_joint_pos[i]);
-        error[i] = nearest_equivalent(simplify_angle((splines.at(i))(t)), currentPoint) - currentPoint;
+        prevError[i] = error[i];
       }
+
+      rate.sleep();
     }
 
-    //calculate control input - PD control loop
-    //populate the velocity command
-    trajPoint.Position.Actuators.Actuator1 = (KP * error[0] + KV * (error[0] - prevError[0]) * RAD_TO_DEG);
-    trajPoint.Position.Actuators.Actuator2 = (KP * error[1] + KV * (error[1] - prevError[1]) * RAD_TO_DEG);
-    trajPoint.Position.Actuators.Actuator3 = (KP * error[2] + KV * (error[2] - prevError[2]) * RAD_TO_DEG);
-    trajPoint.Position.Actuators.Actuator4 = (KP * error[3] + KV * (error[3] - prevError[3]) * RAD_TO_DEG);
-    trajPoint.Position.Actuators.Actuator5 = (KP * error[4] + KV * (error[4] - prevError[4]) * RAD_TO_DEG);
-    trajPoint.Position.Actuators.Actuator6 = (KP * error[5] + KV * (error[5] - prevError[5]) * RAD_TO_DEG);
-
-    //for debugging:
-    // cout << "Errors: " << error[0] << ", " << error[1] << ", " << error[2] << ", " << error[3] << ", " << error[4] << ", " << error[5] << endl;
-
-    // Actually send the command off
-    if(sim_flag_){
-      publishJacoPoint2ROSTraj(trajPoint);
-
-    } else {
-      //send the velocity command - to real-robot
-      executeAngularTrajectoryPoint(trajPoint, true);
-    }
-    for (unsigned int i = 0; i < NUM_JACO_JOINTS; i++)
-    {
-      prevError[i] = error[i];
-    }
-
-    rate.sleep();
+    control_msgs::FollowJointTrajectoryResult result;
+    result.error_code = control_msgs::FollowJointTrajectoryResult::SUCCESSFUL;
+    smooth_joint_trajectory_server_->setSucceeded(result);
   }
-
-  control_msgs::FollowJointTrajectoryResult result;
-  result.error_code = control_msgs::FollowJointTrajectoryResult::SUCCESSFUL;
-  smooth_joint_trajectory_server_->setSucceeded(result);
 }
 
 /*****************************************/
