@@ -14,6 +14,9 @@ JacoArmTrajectoryController::JacoArmTrajectoryController(ros::NodeHandle nh, ros
   pnh.param("sim", sim_flag_, false);
   loadParameters(nh);
 
+  // For gravity compensation
+  not_safe_for_gc_ = false;
+
   // Create actionlib servers and clients
   trajectory_server_              = new TrajectoryServer( nh, topic_prefix_ + "_arm/arm_controller/trajectory", boost::bind(&JacoArmTrajectoryController::execute_trajectory, this, _1), true);
   smooth_joint_trajectory_server_ = new TrajectoryServer( nh, topic_prefix_ + "_arm/joint_velocity_controller/trajectory", boost::bind(&JacoArmTrajectoryController::execute_joint_trajectory, this, _1), true);
@@ -89,6 +92,12 @@ JacoArmTrajectoryController::JacoArmTrajectoryController(ros::NodeHandle nh, ros
     // Initialize specific controller commands for jaco sdk  
     StartControlAPI();
     SetAngularControl();
+
+    // Initalize gravity componesation (gravity vector and paramters)
+    ku.init_vars();
+    float gravVec[] = {0,-9.81,0};
+    SetGravityVector(gravVec);
+    ku.setGravityWithParams("/home/vector/other/kinova/data/ParametersOptimal_Z.txt");
   }
   else
   { 
@@ -141,6 +150,8 @@ JacoArmTrajectoryController::JacoArmTrajectoryController(ros::NodeHandle nh, ros
                                                 &JacoArmTrajectoryController::getCartesianPosition, this);
   eStopServer = nh.advertiseService(topic_prefix_+"_arm/software_estop", &JacoArmTrajectoryController::eStopCallback, this);
   eraseTrajectoriesServer = nh.advertiseService(topic_prefix_+"_arm/erase_trajectories", &JacoArmTrajectoryController::eraseTrajectoriesCallback, this);
+
+  gravCompServer = nh.advertiseService(topic_prefix_+"_arm/grav_comp", &JacoArmTrajectoryController::gravCompCallback, this);
 
   // Action servers
   trajectory_server_->start();
@@ -292,7 +303,7 @@ void JacoArmTrajectoryController::execute_trajectory(const control_msgs::FollowJ
   }
 
   // Check if the virtual estop has been enabled
-  if (eStopEnabled)
+  if (eStopEnabled || controlType == GRAVITY_COMPENSATION_CONTROL)
   {
     // Clear all commands and exit
     control_msgs::FollowJointTrajectoryResult result;
@@ -300,6 +311,8 @@ void JacoArmTrajectoryController::execute_trajectory(const control_msgs::FollowJ
     trajectory_server_->setSucceeded(result);
     return;
   }
+
+  not_safe_for_gc_ = true;
 
   // Check if we're in simulation
   if (sim_flag_)
@@ -451,6 +464,8 @@ void JacoArmTrajectoryController::execute_trajectory(const control_msgs::FollowJ
   control_msgs::FollowJointTrajectoryResult result;
   result.error_code = control_msgs::FollowJointTrajectoryResult::SUCCESSFUL;
   trajectory_server_->setSucceeded(result);
+
+  not_safe_for_gc_ = false;
 }
 
 /*****************************************/
@@ -462,13 +477,15 @@ void JacoArmTrajectoryController::execute_trajectory(const control_msgs::FollowJ
 void JacoArmTrajectoryController::execute_smooth_trajectory(const control_msgs::FollowJointTrajectoryGoalConstPtr &goal)
 {
   //cancel check
-  if (eStopEnabled)
+  if (eStopEnabled || controlType == GRAVITY_COMPENSATION_CONTROL)
   {
     control_msgs::FollowJointTrajectoryResult result;
     result.error_code = control_msgs::FollowJointTrajectoryResult::PATH_TOLERANCE_VIOLATED;
     smooth_trajectory_server_->setSucceeded(result);
     return;
   }
+
+  not_safe_for_gc_ = true;
 
   // Check if we're in simulation
   if (sim_flag_)
@@ -665,7 +682,11 @@ void JacoArmTrajectoryController::execute_smooth_trajectory(const control_msgs::
   control_msgs::FollowJointTrajectoryResult result;
   result.error_code = control_msgs::FollowJointTrajectoryResult::SUCCESSFUL;
   smooth_trajectory_server_->setSucceeded(result);
+
+  not_safe_for_gc_ = false;
 }
+
+//#define DEBUG_VEL_TRA
 
 /**
 * Trajectory execution that actually splines the joints together to send to the robot arm
@@ -674,7 +695,7 @@ void JacoArmTrajectoryController::execute_smooth_trajectory(const control_msgs::
 void JacoArmTrajectoryController::execute_joint_trajectory(const control_msgs::FollowJointTrajectoryGoalConstPtr &goal)
 {
   //check for cancel
-  if (eStopEnabled)
+  if (eStopEnabled || controlType == GRAVITY_COMPENSATION_CONTROL)
   {
     control_msgs::FollowJointTrajectoryResult result;
     result.error_code = control_msgs::FollowJointTrajectoryResult::PATH_TOLERANCE_VIOLATED;
@@ -682,8 +703,15 @@ void JacoArmTrajectoryController::execute_joint_trajectory(const control_msgs::F
     return;
   }
 
+  not_safe_for_gc_ = true;
+
   float trajectoryPoints[NUM_JACO_JOINTS][goal->trajectory.points.size()];
   int numPoints = goal->trajectory.points.size();
+
+#ifdef DEBUG_VEL_TRA
+  cout << "Number of points in the trajectory: " << numPoints << endl;
+  cout << "Number of joint names in the trajectory: " << goal->trajectory.joint_names.size() << endl;
+#endif
 
   //get trajectory data
   for (unsigned int i = 0; i < numPoints; i++)
@@ -693,10 +721,24 @@ void JacoArmTrajectoryController::execute_joint_trajectory(const control_msgs::F
     for (int trajectory_index = 0; trajectory_index < goal->trajectory.joint_names.size(); trajectory_index++)
     {
       string joint_name = goal->trajectory.joint_names[trajectory_index];
-      int joint_index = distance(joint_names.begin(), find(joint_names.begin(), joint_names.end(), joint_name));
+      int joint_index = std::distance(joint_names.begin(), std::find(joint_names.begin(), joint_names.end(), joint_name));
+      //int joint_index = distance(std::begin(joint_names), find(std::begin(joint_names), std::end(joint_names), joint_name));
+#ifdef DEBUG_VEL_TRA
+      cout << "Current joint name: " << joint_name << endl;
+      cout << "Current joint index: " << joint_index << endl;
+#endif
       if (joint_index >= 0 && joint_index < NUM_JACO_JOINTS)
       {
         trajectoryPoints[joint_index][i] = goal->trajectory.points.at(i).positions.at(trajectory_index);
+
+        //cout << "i: " << i << " " << trajectoryPoints[joint_index][i] << " " << endl;
+      }
+      else
+      {
+        control_msgs::FollowJointTrajectoryResult result;
+        result.error_code = control_msgs::FollowJointTrajectoryResult::INVALID_JOINTS;
+        smooth_joint_trajectory_server_->setSucceeded(result);
+        return;
       }
     }
     //END TEST
@@ -938,9 +980,10 @@ void JacoArmTrajectoryController::execute_joint_trajectory(const control_msgs::F
       trajPoint.Position.Actuators.Actuator5 = (KP * error[4] + KV * (error[4] - prevError[4]) * RAD_TO_DEG);
       trajPoint.Position.Actuators.Actuator6 = (KP * error[5] + KV * (error[5] - prevError[5]) * RAD_TO_DEG);
 
-      //for debugging:
-      // cout << "Errors: " << error[0] << ", " << error[1] << ", " << error[2] << ", " << error[3] << ", " << error[4] << ", " << error[5] << endl;
-
+#ifdef DEBUG_VEL_TRA
+    //for debugging:
+    cout << "Errors: " << error[0] << ", " << error[1] << ", " << error[2] << ", " << error[3] << ", " << error[4] << ", " << error[5] << endl;
+#endif
       //send the velocity command - to real-robot
       executeAngularTrajectoryPoint(trajPoint, true);
 
@@ -955,6 +998,8 @@ void JacoArmTrajectoryController::execute_joint_trajectory(const control_msgs::F
     control_msgs::FollowJointTrajectoryResult result;
     result.error_code = control_msgs::FollowJointTrajectoryResult::SUCCESSFUL;
     smooth_joint_trajectory_server_->setSucceeded(result);
+
+    not_safe_for_gc_ = false;
   }
 }
 
@@ -1101,7 +1146,7 @@ void JacoArmTrajectoryController::execute_gripper_radian(const control_msgs::Gri
 void JacoArmTrajectoryController::home_arm(const wpi_jaco_msgs::HomeArmGoalConstPtr &goal)
 {
   //check for cancel
-  if (eStopEnabled)
+  if (eStopEnabled || controlType == GRAVITY_COMPENSATION_CONTROL)
   {
     wpi_jaco_msgs::HomeArmResult result;
     result.success = false;
@@ -1109,6 +1154,7 @@ void JacoArmTrajectoryController::home_arm(const wpi_jaco_msgs::HomeArmGoalConst
     return;
   }
 
+  not_safe_for_gc_ = true;
   {
     boost::recursive_mutex::scoped_lock lock(api_mutex);
     StopControlAPI();
@@ -1189,6 +1235,8 @@ void JacoArmTrajectoryController::home_arm(const wpi_jaco_msgs::HomeArmGoalConst
   wpi_jaco_msgs::HomeArmResult result;
   result.success = true;
   home_arm_server_->setSucceeded(result);
+
+  not_safe_for_gc_ = false;
 }
 
 bool JacoArmTrajectoryController::loadParameters(const ros::NodeHandle n)
@@ -1328,8 +1376,10 @@ vector<trajectory_msgs::JointTrajectoryPoint> JacoArmTrajectoryController::conve
 
 void JacoArmTrajectoryController::angularCmdCallback(const wpi_jaco_msgs::AngularCommand& msg)
 {
-  if (eStopEnabled)
+  if (eStopEnabled || controlType == GRAVITY_COMPENSATION_CONTROL)
     return;
+
+  not_safe_for_gc_ = true;
 
   // Check if we're in simulation - if not clear the trajectory
   // and set control type
@@ -1473,6 +1523,7 @@ void JacoArmTrajectoryController::angularCmdCallback(const wpi_jaco_msgs::Angula
         SendBasicTrajectory(jacoPoint);
     }
   } 
+  not_safe_for_gc_ = false;
 }
 
 
@@ -1480,8 +1531,10 @@ void JacoArmTrajectoryController::angularCmdCallback(const wpi_jaco_msgs::Angula
 
 void JacoArmTrajectoryController::cartesianCmdCallback(const wpi_jaco_msgs::CartesianCommand& msg)
 {
-  if (eStopEnabled)
+  if (eStopEnabled || controlType == GRAVITY_COMPENSATION_CONTROL)
     return;
+
+  not_safe_for_gc_ = true;
 
   //take control of the arm
   {
@@ -1567,6 +1620,7 @@ void JacoArmTrajectoryController::cartesianCmdCallback(const wpi_jaco_msgs::Cart
       }
     }
   }
+  not_safe_for_gc_ = false;
 }
 
 void JacoArmTrajectoryController::fingerPositionControl(float f1, float f2, float f3)
@@ -1679,8 +1733,10 @@ void JacoArmTrajectoryController::fingerPositionControl(float f1, float f2, floa
 
 void JacoArmTrajectoryController::executeAngularTrajectoryPoint(TrajectoryPoint point, bool erase)
 {
-  if (eStopEnabled)
+  if (eStopEnabled || controlType == GRAVITY_COMPENSATION_CONTROL)
     return;
+
+  not_safe_for_gc_ = true;
 
   boost::recursive_mutex::scoped_lock lock(api_mutex);
 
@@ -1694,17 +1750,21 @@ void JacoArmTrajectoryController::executeAngularTrajectoryPoint(TrajectoryPoint 
     EraseAllTrajectories();
 
   SendBasicTrajectory(point);
+
+  not_safe_for_gc_ = false;
 }
 
 void JacoArmTrajectoryController::executeCartesianTrajectoryPoint(TrajectoryPoint point, bool erase)
 {
-  if (eStopEnabled)
+  if (eStopEnabled || controlType == GRAVITY_COMPENSATION_CONTROL)
     return;
+
+  not_safe_for_gc_ = true;
 
   boost::recursive_mutex::scoped_lock lock(api_mutex);
 
   if (controlType != CARTESIAN_CONTROL)
-  {
+  { 
     SetCartesianControl();
     controlType = CARTESIAN_CONTROL;
   }
@@ -1713,6 +1773,8 @@ void JacoArmTrajectoryController::executeCartesianTrajectoryPoint(TrajectoryPoin
     EraseAllTrajectories();
 
   SendBasicTrajectory(point);
+
+  not_safe_for_gc_ = false;
 }
 
 bool JacoArmTrajectoryController::getAngularPosition(wpi_jaco_msgs::GetAngularPosition::Request &req, wpi_jaco_msgs::GetAngularPosition::Response &res)
@@ -1777,7 +1839,7 @@ bool JacoArmTrajectoryController::eStopCallback(wpi_jaco_msgs::EStop::Request &r
       StopControlAPI();
       ros::Duration(0.05).sleep();
       StartControlAPI();
-      if (controlType == ANGULAR_CONTROL)
+      if (controlType == ANGULAR_CONTROL || controlType == GRAVITY_COMPENSATION_CONTROL)
         SetAngularControl();
       else
         SetCartesianControl();
@@ -1797,6 +1859,38 @@ bool JacoArmTrajectoryController::eraseTrajectoriesCallback(std_srvs::Empty::Req
   }
   return true;
 }
+
+bool JacoArmTrajectoryController::gravCompCallback(wpi_jaco_msgs::GravComp::Request &req, wpi_jaco_msgs::GravComp::Response &res)
+{
+  boost::recursive_mutex::scoped_lock lock(api_mutex);
+  if(not_safe_for_gc_)
+  {
+    ROS_INFO("Unsafe to switch to gravity compensation mode. Is something already running?");
+    res.success = false;
+  }
+  else
+  {
+    EraseAllTrajectories();
+
+    if(req.enableGravComp)
+    {
+      ROS_INFO("Enabling GC");
+      ku.enableGravComp();
+      controlType = GRAVITY_COMPENSATION_CONTROL;
+    }
+    else
+    {
+      ROS_INFO("Disabling GC");
+      ku.disableGravComp();
+      controlType = ANGULAR_CONTROL;
+    }
+
+    res.success = true;
+  }
+
+  return res.success;
+}
+
 }
 
 int main(int argc, char** argv)

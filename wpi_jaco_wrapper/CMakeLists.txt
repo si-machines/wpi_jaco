@@ -27,8 +27,9 @@ include_directories(
 
 ## Declare a cpp executable
 add_executable(jaco_arm_trajectory_node src/jaco_arm_trajectory_node.cpp)
+add_library(kinova_utils src/kinova_utils.cpp)
 ## Specify libraries to link a library or executable target against
-target_link_libraries(jaco_arm_trajectory_node
+target_link_libraries(jaco_arm_trajectory_node kinova_utils
   ${catkin_LIBRARIES}
 )
 ## Add cmake target dependencies of the executable/library

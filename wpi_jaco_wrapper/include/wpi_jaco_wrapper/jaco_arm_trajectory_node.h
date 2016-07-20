@@ -4,15 +4,18 @@
  *
  * jaco_arm_trajectory_node creates a ROS node that provides trajectory execution and gripper 
  * control through the Kinova API, and smooth trajectory following through a velocity controller.
+ * 
+ * Edits for simulation - Vivian Chu
+ * Edits for gravity compenstation - Baris Akgun
  *
  * \author David Kent, GT - dekent@gatech.edu
  * \author Mitchell Wills, WPI - mwills@wpi.edu
+ * \author Vivian Chu, GT - vchu@gatech.edu
+ * \author Baris Akgun, GT - barisakgun@gmail.com
  */
 
 #ifndef JACO_ARM_TRAJECTORY_NODE_H_
 #define JACO_ARM_TRAJECTORY_NODE_H_
-
-#include <ros/ros.h>
 
 #include <actionlib/client/simple_action_client.h>
 #include <actionlib/server/simple_action_server.h>
@@ -32,8 +35,7 @@
 #include <sensor_msgs/JointState.h>
 #include <std_msgs/Bool.h>
 #include <std_srvs/Empty.h>
-
-#include <jaco_sdk/Kinova.API.UsbCommandLayerUbuntu.h>
+#include <wpi_jaco_wrapper/kinova_utils.h>
 
 #define NUM_JACO_JOINTS 6
 
@@ -57,6 +59,7 @@
 //control types
 #define ANGULAR_CONTROL 1
 #define CARTESIAN_CONTROL 2
+#define GRAVITY_COMPENSATION_CONTROL 3
 
 #define NO_ERROR 1 //no error from Kinova API
 
@@ -78,6 +81,8 @@ public:
   typedef actionlib::SimpleActionServer<wpi_jaco_msgs::HomeArmAction>              HomeArmServer;
 
   typedef actionlib::SimpleActionClient<control_msgs::GripperCommandAction>        GripperClient;
+
+  KinovaUtils ku;
 
   /**
    * \brief Constructor
@@ -231,6 +236,15 @@ private:
   bool eraseTrajectoriesCallback(std_srvs::Empty::Request &req, std_srvs::Empty::Response &res);
 
   /**
+  * \brief Callback for enabling/disabling gravity compensation
+  *
+  * @param req service request
+  * @param res service response
+  * @return true on success
+  */
+  bool gravCompCallback(wpi_jaco_msgs::GravComp::Request &req, wpi_jaco_msgs::GravComp::Response &res);
+
+  /**
   * \brief Simple internal command to convert Kinova TrajectoryPoints to ROS JointTrajectoryPoint vector array
   *
   * @param TrajectoryPoint pt
@@ -261,6 +275,7 @@ private:
   ros::ServiceServer cartesianPositionServer; //!< service server to get end effector pose
   ros::ServiceServer eStopServer; //!< service server for software estop and restart
   ros::ServiceServer eraseTrajectoriesServer;
+  ros::ServiceServer gravCompServer; //!< service server for gravity compensatio
 
   ros::Timer joint_state_timer_; //!< timer for joint state publisher
 
@@ -295,6 +310,7 @@ private:
   bool          kinova_gripper_;
   bool          sim_flag_;
   bool          home_arm_;
+  bool          not_safe_for_gc_;
 
   std::vector<std::string> joint_names;
   std::vector<double>      joint_pos_;

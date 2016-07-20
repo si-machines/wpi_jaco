@@ -27,6 +27,7 @@ add_service_files(
   GetCartesianPosition.srv
   JacoFK.srv
   QuaternionToEuler.srv
+  GravComp.srv
 )
 
 ## Generate actions in the 'action' folder
