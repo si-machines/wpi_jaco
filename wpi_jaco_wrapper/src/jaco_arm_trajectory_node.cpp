@@ -826,7 +826,7 @@ void JacoArmTrajectoryController::execute_joint_trajectory(const control_msgs::F
     // Check the total error to determine if the trajectory finished
     totalError = 1.0;
     float prevError = 0.0;
-    while (totalError != prevError && totalError > 0.08){
+    while (abs(totalError -prevError) > 0.001 && totalError > 0.03){
         prevError = totalError;
 
         // Copy from joint_state publisher to current joints
@@ -840,8 +840,9 @@ void JacoArmTrajectoryController::execute_joint_trajectory(const control_msgs::F
           error[i] = nearest_equivalent(simplify_angle(goal->trajectory.points[numPoints-1].positions[i]),currentPoint) - currentPoint;
           totalError += fabs(error[i]);
         }
+
       // Rate to check if error has changed
-      ros::Duration(0.5).sleep(); 
+      ros::Duration(1.0).sleep(); 
     }
 
     // Tell the server we finished the trajectory
