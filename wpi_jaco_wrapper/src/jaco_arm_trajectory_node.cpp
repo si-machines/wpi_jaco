@@ -787,13 +787,22 @@ void JacoArmTrajectoryController::execute_joint_trajectory(const control_msgs::F
     timePoints[i] = timePoints[i - 1] + maxTime * TIME_SCALING_FACTOR;
   }
 
+  ROS_INFO("Generating spline with ECL"); 
   vector<ecl::SmoothLinearSpline> splines;
   splines.resize(6);
-  for (unsigned int i = 0; i < NUM_JACO_JOINTS; i++)
-  {
-    ecl::SmoothLinearSpline tempSpline(timePoints, jointPoints[i], max_curvature_);
-    splines.at(i) = tempSpline;
-  }
+  try {
+    for (unsigned int i = 0; i < NUM_JACO_JOINTS; i++)
+    {
+      ecl::SmoothLinearSpline tempSpline(timePoints, jointPoints[i], max_curvature_);
+      splines.at(i) = tempSpline;
+    }
+  } catch (ecl::DataException<int> &e){
+      std::cout << "Data: " << e.data() << std::endl;
+      cout << e.what() << endl;
+      smooth_joint_trajectory_server_->setAborted();
+      ROS_ERROR("Trajectory could not be generated. Aborting trajectory action.");
+      return;
+  }   
 
   //control loop
   bool trajectoryComplete = false;
