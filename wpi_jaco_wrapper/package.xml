@@ -16,6 +16,7 @@
 
   <buildtool_depend>catkin</buildtool_depend>
   
+  <build_depend>message_generation</build_depend>
   <build_depend>controller_manager</build_depend>
   <build_depend>control_msgs</build_depend>
   <build_depend>ecl_geometry</build_depend>

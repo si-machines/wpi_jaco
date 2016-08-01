@@ -4,7 +4,7 @@ project(wpi_jaco_wrapper)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS actionlib controller_manager control_msgs ecl_geometry hardware_interface wpi_jaco_msgs jaco_sdk rail_manipulation_msgs roscpp sensor_msgs std_msgs std_srvs)
+find_package(catkin REQUIRED COMPONENTS actionlib controller_manager control_msgs ecl_geometry hardware_interface wpi_jaco_msgs jaco_sdk rail_manipulation_msgs roscpp sensor_msgs std_msgs std_srvs message_generation)
 
 ###################################################
 ## Declare things to be passed to other projects ##
@@ -28,10 +28,12 @@ include_directories(
 ## Declare a cpp executable
 add_executable(jaco_arm_trajectory_node src/jaco_arm_trajectory_node.cpp)
 add_library(kinova_utils src/kinova_utils.cpp)
+add_dependencies(kinova_utils wpi_jaco_msgs_gencpp)
 ## Specify libraries to link a library or executable target against
 target_link_libraries(jaco_arm_trajectory_node kinova_utils
   ${catkin_LIBRARIES}
 )
+
 ## Add cmake target dependencies of the executable/library
 add_dependencies(jaco_arm_trajectory_node wpi_jaco_msgs_gencpp)
 
