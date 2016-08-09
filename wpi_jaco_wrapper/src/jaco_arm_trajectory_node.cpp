@@ -796,9 +796,10 @@ void JacoArmTrajectoryController::execute_joint_trajectory(const control_msgs::F
       ecl::SmoothLinearSpline tempSpline(timePoints, jointPoints[i], max_curvature_);
       splines.at(i) = tempSpline;
     }
-  } catch (ecl::DataException<int> &e){
-      std::cout << "Data: " << e.data() << std::endl;
-      cout << e.what() << endl;
+  //} catch (ecl::DataException<int> &e){
+  } catch ( ... ){ // catch ALL exceptions
+      //std::cout << "Data: " << e.data() << std::endl;
+      //cout << e.what() << endl;
       smooth_joint_trajectory_server_->setAborted();
       ROS_ERROR("Trajectory could not be generated. Aborting trajectory action.");
       return;
