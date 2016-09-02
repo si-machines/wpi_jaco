@@ -336,6 +336,7 @@ void JacoArmTrajectoryController::execute_trajectory(const control_msgs::FollowJ
     result.error_code = control_msgs::FollowJointTrajectoryResult::SUCCESSFUL;
     trajectory_server_->setSucceeded(result);
 
+    not_safe_for_gc_ = false; // Allow to go back to kinesthetic mode
     return; // Never go to the real arm if we're in sim
   }
 
@@ -508,7 +509,8 @@ void JacoArmTrajectoryController::execute_smooth_trajectory(const control_msgs::
     control_msgs::FollowJointTrajectoryResult result;
     result.error_code = control_msgs::FollowJointTrajectoryResult::SUCCESSFUL;
     smooth_trajectory_server_->setSucceeded(result);
-
+  
+    not_safe_for_gc_ = false; // allow kinesthetic mode now
     return; // Never go to the real arm if we're in sim
   }
 
@@ -860,6 +862,8 @@ void JacoArmTrajectoryController::execute_joint_trajectory(const control_msgs::F
     control_msgs::FollowJointTrajectoryResult result;
     result.error_code = control_msgs::FollowJointTrajectoryResult::SUCCESSFUL;
     smooth_joint_trajectory_server_->setSucceeded(result);
+
+    not_safe_for_gc_ = false; // Can go into kinesthetic mode again
 
   // Currently left sim_flags inside this section if we wish to go back to velocity control
   } else {
