@@ -799,11 +799,16 @@ void JacoArmTrajectoryController::execute_joint_trajectory(const control_msgs::F
       splines.at(i) = tempSpline;
     }
   //} catch (ecl::DataException<int> &e){
-  } catch ( ... ){ // catch ALL exceptions
+  } catch ( std::exception &exc ){ // catch ALL exceptions
       //std::cout << "Data: " << e.data() << std::endl;
       //cout << e.what() << endl;
-      smooth_joint_trajectory_server_->setAborted();
+      std::cerr << exc.what();
+      control_msgs::FollowJointTrajectoryResult result;
+      result.error_code = control_msgs::FollowJointTrajectoryResult::PATH_TOLERANCE_VIOLATED;
+      smooth_joint_trajectory_server_->setAborted(result);
       ROS_ERROR("Trajectory could not be generated. Aborting trajectory action.");
+
+      not_safe_for_gc_ = false; // Can go into kinesthetic mode again
       return;
   }   
 
