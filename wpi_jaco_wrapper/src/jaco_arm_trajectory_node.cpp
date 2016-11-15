@@ -715,6 +715,14 @@ void JacoArmTrajectoryController::execute_joint_trajectory(const control_msgs::F
   cout << "Number of joint names in the trajectory: " << goal->trajectory.joint_names.size() << endl;
 #endif
 
+  if (numPoints < 2)
+  {
+    control_msgs::FollowJointTrajectoryResult result;
+    result.error_code = control_msgs::FollowJointTrajectoryResult::INVALID_GOAL;
+    smooth_joint_trajectory_server_->setSucceeded(result);
+    return;
+  }
+
   //get trajectory data
   for (unsigned int i = 0; i < numPoints; i++)
   {
