@@ -32,6 +32,11 @@ JacoArmTrajectoryController::JacoArmTrajectoryController(ros::NodeHandle nh, ros
   }
 
   // Initialize joint names
+  if (arm_name_ == "jaco2_7s")
+    num_arm_joints_ = NUM_JACO_JOINTS_7S;
+  else
+    num_arm_joints_ = NUM_JACO_JOINTS;
+
   if (arm_name_ == "jaco2")
   {
     joint_names.push_back(side_ + "_shoulder_pan_joint");
@@ -43,7 +48,7 @@ JacoArmTrajectoryController::JacoArmTrajectoryController(ros::NodeHandle nh, ros
   }
   else
   {
-    for (int joint_id = 0; joint_id < NUM_JACO_JOINTS; ++joint_id)
+    for (int joint_id = 0; joint_id < num_arm_joints_; ++joint_id)
     {
       stringstream joint_name_stream;
       joint_name_stream << arm_name_ << "_joint_" << (joint_id + 1);
@@ -212,11 +217,24 @@ void JacoArmTrajectoryController::update_joint_states()
     joint_eff_[3] = force_data.Actuators.Actuator4;
     joint_eff_[4] = force_data.Actuators.Actuator5;
     joint_eff_[5] = force_data.Actuators.Actuator6;
-    if (kinova_gripper_)
+    if (num_arm_joints_ == 7)
     {
-      joint_eff_[6] = force_data.Fingers.Finger1;
-      joint_eff_[7] = force_data.Fingers.Finger2;
-      joint_eff_[8] = force_data.Fingers.Finger3;
+      joint_eff_[6] = force_data.Actuators.Actuator7;
+      if (kinova_gripper_)
+      {
+        joint_eff_[7] = force_data.Fingers.Finger1;
+        joint_eff_[8] = force_data.Fingers.Finger2;
+        joint_eff_[9] = force_data.Fingers.Finger3;
+      }
+    }
+    else
+    {
+      if (kinova_gripper_)
+      {
+        joint_eff_[6] = force_data.Fingers.Finger1;
+        joint_eff_[7] = force_data.Fingers.Finger2;
+        joint_eff_[8] = force_data.Fingers.Finger3;
+      }
     }
 
     AngularPosition velocity_data;
@@ -227,27 +245,54 @@ void JacoArmTrajectoryController::update_joint_states()
     joint_vel_[3] = velocity_data.Actuators.Actuator4 * DEG_TO_RAD;
     joint_vel_[4] = velocity_data.Actuators.Actuator5 * DEG_TO_RAD;
     joint_vel_[5] = velocity_data.Actuators.Actuator6 * DEG_TO_RAD;
-    if (kinova_gripper_)
+    if (num_arm_joints_ == 7)
     {
-      //NOTE: the finger units are arbitrary, but converting them as if they were in degrees provides an approximately correct visualization
-      joint_vel_[6] = velocity_data.Fingers.Finger1 * DEG_TO_RAD * finger_scale_;
-      joint_vel_[7] = velocity_data.Fingers.Finger2 * DEG_TO_RAD * finger_scale_;
-      joint_vel_[8] = velocity_data.Fingers.Finger3 * DEG_TO_RAD * finger_scale_;
+      joint_vel_[6] = velocity_data.Actuators.Actuator7 * DEG_TO_RAD;
+      if (kinova_gripper_)
+      {
+        //NOTE: the finger units are arbitrary, but converting them as if they were in degrees provides an approximately correct visualization
+        joint_vel_[7] = velocity_data.Fingers.Finger1 * DEG_TO_RAD * finger_scale_;
+        joint_vel_[8] = velocity_data.Fingers.Finger2 * DEG_TO_RAD * finger_scale_;
+        joint_vel_[9] = velocity_data.Fingers.Finger3 * DEG_TO_RAD * finger_scale_;
+      }
+    }
+    else
+    {
+      if (kinova_gripper_)
+      {
+        //NOTE: the finger units are arbitrary, but converting them as if they were in degrees provides an approximately correct visualization
+        joint_vel_[6] = velocity_data.Fingers.Finger1 * DEG_TO_RAD * finger_scale_;
+        joint_vel_[7] = velocity_data.Fingers.Finger2 * DEG_TO_RAD * finger_scale_;
+        joint_vel_[8] = velocity_data.Fingers.Finger3 * DEG_TO_RAD * finger_scale_;
+      }
     }
 
     AngularPosition position_data;
     GetAngularPosition(position_data);
     joint_pos_[0] = simplify_angle(position_data.Actuators.Actuator1 * DEG_TO_RAD);
     joint_pos_[1] = position_data.Actuators.Actuator2 * DEG_TO_RAD;
-    joint_pos_[2] = position_data.Actuators.Actuator3 * DEG_TO_RAD;
-    joint_pos_[3] = simplify_angle(position_data.Actuators.Actuator4 * DEG_TO_RAD);
+    joint_pos_[2] = simplify_angle(position_data.Actuators.Actuator3 * DEG_TO_RAD);
+    joint_pos_[3] = position_data.Actuators.Actuator4 * DEG_TO_RAD;
     joint_pos_[4] = simplify_angle(position_data.Actuators.Actuator5 * DEG_TO_RAD);
     joint_pos_[5] = simplify_angle(position_data.Actuators.Actuator6 * DEG_TO_RAD);
-    if (kinova_gripper_)
+    if (num_arm_joints_ == 7)
     {
-      joint_pos_[6] = position_data.Fingers.Finger1 * DEG_TO_RAD * finger_scale_;
-      joint_pos_[7] = position_data.Fingers.Finger2 * DEG_TO_RAD * finger_scale_;
-      joint_pos_[8] = position_data.Fingers.Finger3 * DEG_TO_RAD * finger_scale_;
+      joint_pos_[6] = simplify_angle(position_data.Actuators.Actuator6 * DEG_TO_RAD);
+      if (kinova_gripper_)
+      {
+        joint_pos_[7] = position_data.Fingers.Finger1 * DEG_TO_RAD * finger_scale_;
+        joint_pos_[8] = position_data.Fingers.Finger2 * DEG_TO_RAD * finger_scale_;
+        joint_pos_[9] = position_data.Fingers.Finger3 * DEG_TO_RAD * finger_scale_;
+      }
+    }
+    else
+    {
+      if (kinova_gripper_)
+      {
+        joint_pos_[6] = position_data.Fingers.Finger1 * DEG_TO_RAD * finger_scale_;
+        joint_pos_[7] = position_data.Fingers.Finger2 * DEG_TO_RAD * finger_scale_;
+        joint_pos_[8] = position_data.Fingers.Finger3 * DEG_TO_RAD * finger_scale_;
+      }
     }
   }
 

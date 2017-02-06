@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<package>
+  <name>jaco2_7s_description</name>
+  <version>0.0.1</version>
+  <description>
+    urdf model for the Jaco2 7-dof with spherical wrist, modified to use a robotiq gripper
+  </description>
+  <maintainer email="ros@kinovarobotics.com">Kinova ROS Support</maintainer>
+  <author>Kinova ROS Support</author>
+  <license>BSD</license>
+  <url>http://ros.org/wiki/jaco2_7s_description</url>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <build_depend>urdf</build_depend>
+  <build_depend>xacro</build_depend>
+
+  <run_depend>urdf</run_depend>
+  <run_depend>xacro</run_depend>
+
+</package>
+
+

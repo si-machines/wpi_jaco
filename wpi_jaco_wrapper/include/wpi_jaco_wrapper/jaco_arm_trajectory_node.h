@@ -38,9 +38,10 @@
 #include <wpi_jaco_wrapper/kinova_utils.h>
 
 #define NUM_JACO_JOINTS 6
+#define NUM_JACO_JOINTS_7S 7
 
-#define LARGE_ACTUATOR_VELOCITY 0.8378 //maximum velocity of large actuator (joints 1-3) (rad/s)
-#define SMALL_ACTUATOR_VELOCITY 1.0472 //maximum velocity of small actuator (joints 4-6) (rad/s)
+#define LARGE_ACTUATOR_VELOCITY 0.8378 //maximum velocity of large actuator (joints 1-3; 1-4 for 7s) (rad/s)
+#define SMALL_ACTUATOR_VELOCITY 1.0472 //maximum velocity of small actuator (joints 4-6; 5-7 for 7s) (rad/s)
 #define TIME_SCALING_FACTOR 1.5 //keep the trajectory at a followable speed
 
 #define DEG_TO_RAD (M_PI/180)
@@ -307,6 +308,7 @@ private:
   double        gripper_closed_;
   int           num_fingers_;
   int           num_joints_;
+  int           num_arm_joints_;
   bool          kinova_gripper_;
   bool          sim_flag_;
   bool          home_arm_;
