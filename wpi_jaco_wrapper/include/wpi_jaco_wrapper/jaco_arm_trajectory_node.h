@@ -311,7 +311,6 @@ private:
   bool          sim_flag_;
   bool          home_arm_;
   bool          not_safe_for_gc_;
-
   std::vector<std::string> joint_names;
   std::vector<double>      joint_pos_;
   std::vector<double>      joint_vel_;

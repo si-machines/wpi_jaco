@@ -18,5 +18,4 @@
   </node>
   <node name="jaco_conversions" pkg="wpi_jaco_wrapper" type="jaco_conversions"/>
   <node name="jaco_kinematics" pkg="wpi_jaco_wrapper" type="jaco_kinematics"/>
-
 </launch>

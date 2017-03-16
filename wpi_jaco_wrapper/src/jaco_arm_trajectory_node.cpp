@@ -78,6 +78,27 @@ JacoArmTrajectoryController::JacoArmTrajectoryController(ros::NodeHandle nh, ros
       ROS_INFO("Retrying in 5 seconds..");
       ros::Duration(5.0).sleep();
     }
+
+    //Setting up the device id for two arms///////
+    KinovaDevice * devinfo = new KinovaDevice[20];
+    int res;
+    int num_arms = GetDevices(devinfo, res);
+    ROS_INFO("Number of Arms connected = %d", num_arms);
+
+    if(side_ == "right")
+    {
+      ROS_WARN("Make Sure the Arm serial numbers match");
+      ROS_INFO("Intializing Right Arm with Serial Number = %s", std::string(devinfo[1].SerialNumber).c_str());
+      int result = SetActiveDevice(devinfo[1]);
+    }
+    else 
+    {
+      ROS_INFO("Intializing Left arm with Serial Number = %s", std::string(devinfo[0].SerialNumber).c_str());
+      int result = SetActiveDevice(devinfo[0]);
+    }
+
+    delete devinfo;
+
     ros::Duration(1.0).sleep();
     StartControlAPI();
     ros::Duration(3.0).sleep();
@@ -117,8 +138,19 @@ JacoArmTrajectoryController::JacoArmTrajectoryController(ros::NodeHandle nh, ros
   // Only publish the real hardware joints when using the real arm
   if (!sim_flag_)
   {
+    ROS_INFO("Launching the %s arm", side_.c_str());
     // Messages - TODO: I think I need to move the joint state publishers out; or just let them do callbacks with no hardware?
+    if(side_ == "left")
+    {
+    ROS_INFO("Should launch left arm feedback");
+    joint_state_pub_ = nh.advertise<sensor_msgs::JointState>(side_ + "_arm/joint_states", 1);
+    }
+    else
+    {
     joint_state_pub_ = nh.advertise<sensor_msgs::JointState>("vector/" + side_ + "_arm/joint_states", 1);
+    ROS_INFO("Should launch right arm feedback");
+    }
+   // joint_state_pub_ = nh.advertise<sensor_msgs::JointState>("vector/" + side_ + "_arm/joint_states", 1);
     update_joint_states(); // note: moved before setting up cmd publishers - might break
     joint_state_timer_ = nh.createTimer(ros::Duration(0.0333),
                                       boost::bind(&JacoArmTrajectoryController::update_joint_states, this));
