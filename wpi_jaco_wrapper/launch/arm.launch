@@ -1,5 +1,5 @@
 <launch>
-  <arg name="arm_name" default="jaco2" />
+  <arg name="arm_name" default="jaco2_7s" />
   <arg name="home_arm_on_init" default="false" />
   <arg name="kinova_gripper" default="false" />
   <arg name="sim" default="false" />

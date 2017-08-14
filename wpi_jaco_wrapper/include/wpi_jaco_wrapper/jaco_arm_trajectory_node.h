@@ -274,7 +274,7 @@ private:
   ros::ServiceClient qe_client; //!< quaternion to euler (XYZ) conversion client
   ros::ServiceServer angularPositionServer; //!< service server to get the joint positions
   ros::ServiceServer cartesianPositionServer; //!< service server to get end effector pose
-  ros::ServiceServer eStopServer; //!< service server for software estop and restart
+  ros::ServiceServer eStopServer; //!< service server for software estop and restart 	
   ros::ServiceServer eraseTrajectoriesServer;
   ros::ServiceServer gravCompServer; //!< service server for gravity compensatio
 
