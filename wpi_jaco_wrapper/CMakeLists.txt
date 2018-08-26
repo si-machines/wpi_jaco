@@ -28,14 +28,14 @@ include_directories(
 ## Declare a cpp executable
 add_executable(jaco_arm_trajectory_node src/jaco_arm_trajectory_node.cpp)
 add_library(kinova_utils src/kinova_utils.cpp)
-add_dependencies(kinova_utils wpi_jaco_msgs_gencpp)
+add_dependencies(kinova_utils wpi_jaco_msgs_generate_messages_cpp)
 ## Specify libraries to link a library or executable target against
 target_link_libraries(jaco_arm_trajectory_node kinova_utils
   ${catkin_LIBRARIES}
 )
 
 ## Add cmake target dependencies of the executable/library
-add_dependencies(jaco_arm_trajectory_node wpi_jaco_msgs_gencpp)
+add_dependencies(jaco_arm_trajectory_node wpi_jaco_msgs_generate_messages_cpp)
 
 ## Declare a cpp executable
 add_executable(jaco_manipulation src/jaco_manipulation.cpp)
@@ -44,7 +44,7 @@ target_link_libraries(jaco_manipulation
   ${catkin_LIBRARIES}
 )
 ## Add cmake target dependencies of the executable/library
-add_dependencies(jaco_manipulation wpi_jaco_msgs_gencpp rail_manipulation_msgs_gencpp)
+add_dependencies(jaco_manipulation wpi_jaco_msgs_generate_messages_cpp rail_manipulation_msgs_generate_messages_cpp)
 
 ## Declare a cpp executable
 add_executable(jaco_kinematics src/jaco_kinematics.cpp)
@@ -53,7 +53,7 @@ target_link_libraries(jaco_kinematics
   ${catkin_LIBRARIES}
 )
 ## Add cmake target dependencies of the executable/library
-add_dependencies(jaco_kinematics wpi_jaco_msgs_gencpp)
+add_dependencies(jaco_kinematics wpi_jaco_msgs_generate_messages_cpp)
 
 ## Declare a cpp executable
 add_executable(jaco_conversions src/jaco_conversions.cpp)
@@ -62,7 +62,7 @@ target_link_libraries(jaco_conversions
   ${catkin_LIBRARIES}
 )
 ## Add cmake target dependencies of the executable/library
-add_dependencies(jaco_conversions wpi_jaco_msgs_gencpp)
+add_dependencies(jaco_conversions wpi_jaco_msgs_generate_messages_cpp)
 
 #############
 ## Install ##
