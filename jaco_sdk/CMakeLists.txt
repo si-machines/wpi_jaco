@@ -26,7 +26,6 @@ find_library(JACO_USB_LIB NAMES Kinova.API.USBCommandLayerUbuntu PATHS "lib/${AR
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES Kinova.API.CommLayerUbuntu Kinova.API.USBCommandLayerUbuntu
-  DEPENDS libusb-1.0
 )
 
 add_library(Kinova.API.CommLayerUbuntu ${JACO_COMM_LIB})
